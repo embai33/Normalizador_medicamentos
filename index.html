@@ -396,6 +396,7 @@
         let workbook = null;
         let normalizedData = null;
         let originalColumnName = 'Descripción Producto Dispensado';
+        let originalFileName = '';
 
         // Configuración de la zona de carga
         const uploadArea = document.getElementById('uploadArea');
@@ -435,6 +436,9 @@
                 alert('Por favor, seleccione un archivo Excel válido (.xlsx o .xls)');
                 return;
             }
+
+            // Guardar el nombre del archivo original
+            originalFileName = file.name;
 
             showLoading();
 
@@ -659,14 +663,26 @@
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "Datos Normalizados");
 
+            // Generar nombre del archivo basado en el original
+            let fileName = 'Medicamentos_Normalizados.xlsx';
+            
+            if (originalFileName) {
+                // Extraer nombre sin extensión
+                const nameWithoutExt = originalFileName.replace(/\.(xlsx|xls)$/i, '');
+                // Extraer la extensión original
+                const extension = originalFileName.match(/\.(xlsx|xls)$/i)[0];
+                // Construir nuevo nombre
+                fileName = `${nameWithoutExt}_Normalizado${extension}`;
+            }
+
             // Generar archivo
-            const fileName = `Medicamentos_Normalizados_${new Date().toISOString().slice(0,10)}.xlsx`;
             XLSX.writeFile(wb, fileName);
         }
 
         function resetApplication() {
             workbook = null;
             normalizedData = null;
+            originalFileName = '';
             fileInput.value = '';
 
             document.getElementById('statsSection').classList.add('hidden');
