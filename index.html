@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Normalización de Medicamentos</title>
+    <title>Normalización de Medicamentos y Patologías</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         * {
@@ -144,10 +144,18 @@
             font-size: 18px;
         }
 
-        .info-box ul {
+        .info-box ul, .info-box ol {
             margin-left: 20px;
             color: #555;
             line-height: 1.8;
+        }
+
+        .info-box code {
+            background: #e8eaf0;
+            padding: 1px 5px;
+            border-radius: 4px;
+            font-size: 13px;
+            color: #2b2f49;
         }
 
         .stats-container {
@@ -302,8 +310,8 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🏥 Normalización de medicamentos</h1>
-            <p>Aplicación que normaliza la descripción de los medicamentos dispensados para la obtención de indicadores</p>
+            <h1>🏥 Normalización de medicamentos y patologías</h1>
+            <p>Aplicación que normaliza la descripción de los medicamentos y las patologías incluidas en las dispensaciones farmacéuticas</p>
         </div>
 
         <div class="content">
@@ -311,12 +319,13 @@
             <div class="section">
                 <div class="info-box">
                     <h3>📋 Instrucciones de uso</h3>
-                    <ul>
+                    <ol>
                         <li>Cargue el archivo Excel con las dispensaciones farmacéuticas</li>
-                        <li>La aplicación normalizará automáticamente el campo "Descripción Producto Dispensado"</li>
-                        <li>Formato normalizado: NOMBRE_COMERCIAL DOSISMG (ej: HYRIMOZ 40MG)</li>
-                        <li>El archivo descargado contendrá la columna normalizada y la original renombrada</li>
-                    </ul>
+                        <li>La aplicación normalizará automáticamente el campo <strong>"Descripción Producto Dispensado"</strong> — formato resultante: <code>NOMBRE_COMERCIAL DOSISMG</code> (ej: HYRIMOZ 40MG)</li>
+                        <li>La aplicación normalizará también el campo <strong>"Patología"</strong>, agrupando las variantes clínicas en categorías diagnósticas estandarizadas (ej: "ESPONDILITIS ANQUILOSANTE DE REGIÓN LUMBAR" → "Espondiloartritis (axial/EA, reactiva, sacroileítis, entesopatía)")</li>
+                        <li>El archivo descargado conservará todas las columnas originales con los valores normalizados en su posición y los valores originales añadidos al final</li>
+                        <li>El archivo normalizado se nombrará igual que el original añadiendo <strong>"_Normalizado"</strong> antes de la extensión (ej: <code>datos.xlsx</code> → <code>datos_Normalizado.xlsx</code>)</li>
+                    </ol>
                 </div>
             </div>
 
@@ -363,8 +372,10 @@
                     <table>
                         <thead>
                             <tr>
-                                <th style="width: 50%">Descripción Original</th>
-                                <th style="width: 50%">Descripción Normalizada</th>
+                                <th style="width: 30%">Patología original</th>
+                                <th style="width: 20%">Patología normalizada</th>
+                                <th style="width: 30%">Medicamento original</th>
+                                <th style="width: 20%">Medicamento normalizado</th>
                             </tr>
                         </thead>
                         <tbody id="previewTableBody">
@@ -397,6 +408,397 @@
         let normalizedData = null;
         let originalColumnName = 'Descripción Producto Dispensado';
         let originalFileName = '';
+
+
+        // Diccionario de normalización de patologías (381 entradas, 30 grupos)
+        const PATHOLOGY_MAP = {
+          "ARTRITIS REUMATOIDE": "Artritis reumatoide (adulto)",
+          "ARTRITIS REUMATOIDE CON FACTOR REUMATOIDE, NO ESPECIFICADA": "Artritis reumatoide (adulto)",
+          "ARTRITIS REUMATOIDE NO ESPECIFICADA": "Artritis reumatoide (adulto)",
+          "ARTRITIS REUMATOIDE SIN FACTOR REUMATOIDE, LOCALIZACION NO ESPECIFICADA": "Artritis reumatoide (adulto)",
+          "ARTRITIS REUMATOIDE SIN FACTOR REUMATOIDE, LOCALIZACIONES MULTIPLES": "Artritis reumatoide (adulto)",
+          "ARTRITIS REUMATOIDE SIN FACTOR REUMATOIDE, LOCALIZACIÓN NO ESPECIFICADA": "Artritis reumatoide (adulto)",
+          "ARTRITIS REUMATOIDE SIN FACTOR REUMATOIDE, TOBILLO Y PIE DERECHOS": "Artritis reumatoide (adulto)",
+          "ARTRITIS REUMATOIDES Y OTRAS POLIARTROPIAS INFLAMATORIAS": "Artritis reumatoide (adulto)",
+          "ARTR REUMAT JUVENIL OLIGOARTICULAR O PAUCIARTICULAR": "Artritis idiopática juvenil (AIJ)",
+          "ARTRITIS CRÓNICA JUVENIL NO ESPECIFICADA, LOCALIZACIÓN NO ESPECIFICADA": "Artritis idiopática juvenil (AIJ)",
+          "ARTRITIS CRÓNICA JUVENIL NO ESPECIFICADA, MUÑECA IZQUIERDA": "Artritis idiopática juvenil (AIJ)",
+          "ARTRITIS CRÓNICA JUVENIL PAUCIARTICULAR, LOCALIZACIÓN NO ESPECIFICADA": "Artritis idiopática juvenil (AIJ)",
+          "ARTRITIS JUVENIL NO ESPECIFICADA, LOCALIZACION NO ESPECIFICADA": "Artritis idiopática juvenil (AIJ)",
+          "ARTRITIS JUVENIL NO ESPECIFICADA, LOCALIZACIONES MULTIPLES": "Artritis idiopática juvenil (AIJ)",
+          "ARTRITIS JUVENIL NO ESPECIFICADA, LOCALIZACIÓN NO ESPECIFICADA": "Artritis idiopática juvenil (AIJ)",
+          "ARTRITIS REUMAT JUV POLIART., CRONICA O NO ESPECIFICADA": "Artritis idiopática juvenil (AIJ)",
+          "ARTRITIS REUMATOIDE JUVENIL DE COMIENZO SISTEMICO, LOCALIZACION NO ESPECIFICADA": "Artritis idiopática juvenil (AIJ)",
+          "ARTRITIS REUMATOIDE JUVENIL NO ESPECIFICADA, LOCALIZACION NO ESPECIFICADA": "Artritis idiopática juvenil (AIJ)",
+          "ARTRITIS REUMATOIDE JUVENIL NO ESPECIFICADA, MUÑECA IZQUIERDA": "Artritis idiopática juvenil (AIJ)",
+          "OTRAS ARTRITIS JUVENILES, LOCALIZACION NO ESPECIFICADA": "Artritis idiopática juvenil (AIJ)",
+          "OTRAS ARTRITIS JUVENILES, OTRA LOCALIZACION ESPECIFICADA": "Artritis idiopática juvenil (AIJ)",
+          "OTRAS ARTRITIS JUVENILES, OTRA LOCALIZACIÓN ESPECIFICADA": "Artritis idiopática juvenil (AIJ)",
+          "POLIARTRITIS CRÓNICA JUVENIL (SERONEGATIVA)": "Artritis idiopática juvenil (AIJ)",
+          "POLIARTRITIS REUMATOIDE JUVENIL (SERONEGATIVA)": "Artritis idiopática juvenil (AIJ)",
+          "ARTRITIS PSORIASICA MUTILANTE": "Artritis psoriásica",
+          "ARTRITIS PSORIÁSICA MUTILANTE": "Artritis psoriásica",
+          "ARTROPATIA PSORIASICA": "Artritis psoriásica",
+          "ARTROPATIA PSORIASICA JUVENIL": "Artritis psoriásica",
+          "ARTROPATIA PSORIASICA, NO ESPECIFICADA": "Artritis psoriásica",
+          "ARTROPATIA PSORIÁSICA, NO ESPECIFICADA": "Artritis psoriásica",
+          "ESPONDILITIS PSORIASICA": "Artritis psoriásica",
+          "ESPONDILITIS PSORIÁSICA": "Artritis psoriásica",
+          "OTROS TIPOS DE ARTROPATIA PSORIASICA": "Artritis psoriásica",
+          "OTROS TIPOS DE ARTROPATÍA PSORIÁSICA": "Artritis psoriásica",
+          "ENFERMEDAD DE REITER": "Espondiloartritis (axial/EA, reactiva, sacroileítis, entesopatía)",
+          "ENFERMEDAD DE REITER, LOCALIZACION NO ESPECIFICADA": "Espondiloartritis (axial/EA, reactiva, sacroileítis, entesopatía)",
+          "ENFERMEDAD DE REITER, LOCALIZACIÓN NO ESPECIFICADA": "Espondiloartritis (axial/EA, reactiva, sacroileítis, entesopatía)",
+          "ENTESOPATIA VERTEBRAL, REGION DORSOLUMBAR": "Espondiloartritis (axial/EA, reactiva, sacroileítis, entesopatía)",
+          "ENTESOPATIA VERTEBRAL, REGION LUMBAR": "Espondiloartritis (axial/EA, reactiva, sacroileítis, entesopatía)",
+          "ENTESOPATÍA VERTEBRAL, LOCALIZACIONES MÚLTIPLES DE COLUMNA VERTEBRAL": "Espondiloartritis (axial/EA, reactiva, sacroileítis, entesopatía)",
+          "ESPONDILITIS ANQUILOSANTE": "Espondiloartritis (axial/EA, reactiva, sacroileítis, entesopatía)",
+          "ESPONDILITIS ANQUILOSANTE DE LOCALIZACIONES MULTIPLES DE LA COLUMNA VERTEBRAL": "Espondiloartritis (axial/EA, reactiva, sacroileítis, entesopatía)",
+          "ESPONDILITIS ANQUILOSANTE DE LOCALIZACIONES MÚLTIPLES DE LA COLUMNA VERTEBRAL": "Espondiloartritis (axial/EA, reactiva, sacroileítis, entesopatía)",
+          "ESPONDILITIS ANQUILOSANTE DE LOCALIZACIONES NO ESPECIFICADAS DE LA COLUMNA VERTEBRAL": "Espondiloartritis (axial/EA, reactiva, sacroileítis, entesopatía)",
+          "ESPONDILITIS ANQUILOSANTE DE REGION DORSOLUMBAR": "Espondiloartritis (axial/EA, reactiva, sacroileítis, entesopatía)",
+          "ESPONDILITIS ANQUILOSANTE DE REGION LUMBAR": "Espondiloartritis (axial/EA, reactiva, sacroileítis, entesopatía)",
+          "ESPONDILITIS ANQUILOSANTE DE REGION LUMBOSACRA": "Espondiloartritis (axial/EA, reactiva, sacroileítis, entesopatía)",
+          "ESPONDILITIS ANQUILOSANTE DE REGIONES SACRA Y SACROCOCCIGEA": "Espondiloartritis (axial/EA, reactiva, sacroileítis, entesopatía)",
+          "ESPONDILITIS ANQUILOSANTE DE REGIONES SACRA Y SACROCOCCÍGEA": "Espondiloartritis (axial/EA, reactiva, sacroileítis, entesopatía)",
+          "ESPONDILITIS ANQUILOSANTE DE REGIÓN LUMBAR": "Espondiloartritis (axial/EA, reactiva, sacroileítis, entesopatía)",
+          "ESPONDILITIS ANQUILOSANTE DE REGIÓN LUMBOSACRA": "Espondiloartritis (axial/EA, reactiva, sacroileítis, entesopatía)",
+          "ESPONDILITIS ANQUILOSANTE JUVENIL": "Espondiloartritis (axial/EA, reactiva, sacroileítis, entesopatía)",
+          "ESPONDILOARTRITIS AXIAL NO RADIOGRÁFICA": "Espondiloartritis (axial/EA, reactiva, sacroileítis, entesopatía)",
+          "ESPONDILOPATIA EN ENFERMEDADES CLASIFICADAS BAJO OTRO CONCEPTO, LOCALIZACION NO ESPECIFICADA": "Espondiloartritis (axial/EA, reactiva, sacroileítis, entesopatía)",
+          "ESPONDILOPATIA EN ENFERMEDADES CLASIFICADAS BAJO OTRO CONCEPTO, LOCALIZACIONES MULTIPLES DE COLUMNA VERTEBRAL": "Espondiloartritis (axial/EA, reactiva, sacroileítis, entesopatía)",
+          "ESPONDILOPATIA EN ENFERMEDADES CLASIFICADAS BAJO OTRO CONCEPTO, REGION TORACICA": "Espondiloartritis (axial/EA, reactiva, sacroileítis, entesopatía)",
+          "ESPONDILOPATIA INFLAMATORIA NO ESPECIFICADA, LOCALIZACION NO ESPECIFICADA": "Espondiloartritis (axial/EA, reactiva, sacroileítis, entesopatía)",
+          "ESPONDILOPATIA, NO ESPECIFICADA": "Espondiloartritis (axial/EA, reactiva, sacroileítis, entesopatía)",
+          "ESPONDILOPATÍA EN ENFERMEDADES CLASIFICADAS BAJO OTRO CONCEPTO, LOCALIZACIONES MÚLTIPLES DE COLUMNA VERTEBRAL": "Espondiloartritis (axial/EA, reactiva, sacroileítis, entesopatía)",
+          "ESPONDILOPATÍA EN ENFERMEDADES CLASIFICADAS BAJO OTRO CONCEPTO, REGIÓN TORÁCICA": "Espondiloartritis (axial/EA, reactiva, sacroileítis, entesopatía)",
+          "ESPONDILOPATÍA INFLAMATORIA NO ESPECIFICADA, LOCALIZACIÓN NO ESPECIFICADA": "Espondiloartritis (axial/EA, reactiva, sacroileítis, entesopatía)",
+          "OTRAS ESPONDILOPATIAS INFLAMATORIAS ESPECIFICADAS, REGION DORSOLUMBAR": "Espondiloartritis (axial/EA, reactiva, sacroileítis, entesopatía)",
+          "SACROILITIS -NCOC": "Espondiloartritis (axial/EA, reactiva, sacroileítis, entesopatía)",
+          "SACROILITIS, NO CLASIFICADA BAJO OTRO CONCEPTO": "Espondiloartritis (axial/EA, reactiva, sacroileítis, entesopatía)",
+          "ACRODERMATITIS CONTINUA": "Psoriasis",
+          "OTRA PSORIASIS": "Psoriasis",
+          "OTROS TIPOS DE PSORIASIS": "Psoriasis",
+          "PSORIASIS DEL CUERO CABELLUDO": "Psoriasis",
+          "PSORIASIS GUTTATA": "Psoriasis",
+          "PSORIASIS LEVE O LOCALIZADA (AFECTACION HASTA EL 1": "Psoriasis",
+          "PSORIASIS LEVE O LOCALIZADA (AFECTACION HASTA EL 10% DEL TEGUMENTO)": "Psoriasis",
+          "PSORIASIS MODERADA (AFECTACION > 10% DEL TEGUMENTO": "Psoriasis",
+          "PSORIASIS MODERADA (AFECTACION > 10% DEL TEGUMENTO)": "Psoriasis",
+          "PSORIASIS PUSTULOSA GENERALIZADA": "Psoriasis",
+          "PSORIASIS UNGUEAL": "Psoriasis",
+          "PSORIASIS VULGAR": "Psoriasis",
+          "PSORIASIS Y ALTERACIONES SIMILARES": "Psoriasis",
+          "PSORIASIS, NO ESPECIFICADA": "Psoriasis",
+          "PUSTULOSIS PALMAR Y PLANTAR": "Psoriasis",
+          "DERMATITIS ATOPICA Y ESTADOS RELACIONADOS": "Dermatitis atópica",
+          "DERMATITIS ATOPICA, NO ESPECIFICADA": "Dermatitis atópica",
+          "DERMATITIS ATÓPICA, NO ESPECIFICADA": "Dermatitis atópica",
+          "NEURODERMATITIS ATOPICA": "Dermatitis atópica",
+          "OTROS DERMATITIS ATOPICA Y ESTADOS RELACIONADOS": "Dermatitis atópica",
+          "OTROS TIPOS DE DERMATITIS ATOPICA": "Dermatitis atópica",
+          "OTROS TIPOS DE DERMATITIS ATÓPICA": "Dermatitis atópica",
+          "PRURIGO DE BESNIER": "Dermatitis atópica",
+          "HIDRADENITIS": "Hidradenitis supurativa",
+          "HIDRADENITIS SUPURATIVA": "Hidradenitis supurativa",
+          "ENFERMEDAD DE CROHN DE INTESTINO DELGADO CON ABSCESO": "Enfermedad de Crohn",
+          "ENFERMEDAD DE CROHN DE INTESTINO DELGADO CON FISTULA": "Enfermedad de Crohn",
+          "ENFERMEDAD DE CROHN DE INTESTINO DELGADO CON FÍSTULA": "Enfermedad de Crohn",
+          "ENFERMEDAD DE CROHN DE INTESTINO DELGADO CON OBSTRUCCION INTESTINAL": "Enfermedad de Crohn",
+          "ENFERMEDAD DE CROHN DE INTESTINO DELGADO CON OTRA COMPLICACION": "Enfermedad de Crohn",
+          "ENFERMEDAD DE CROHN DE INTESTINO DELGADO CON OTRA COMPLICACIÓN": "Enfermedad de Crohn",
+          "ENFERMEDAD DE CROHN DE INTESTINO DELGADO SIN COMPLICACIONES": "Enfermedad de Crohn",
+          "ENFERMEDAD DE CROHN DE INTESTINO GRUESO CON ABSCESO": "Enfermedad de Crohn",
+          "ENFERMEDAD DE CROHN DE INTESTINO GRUESO CON COMPLICACIONES NO ESPECIFICADAS": "Enfermedad de Crohn",
+          "ENFERMEDAD DE CROHN DE INTESTINO GRUESO CON OTRA COMPLICACION": "Enfermedad de Crohn",
+          "ENFERMEDAD DE CROHN DE INTESTINO GRUESO SIN COMPLICACIONES": "Enfermedad de Crohn",
+          "ENFERMEDAD DE CROHN DE INTESTINOS DELGADO Y GRUESO, CON ABSCESO": "Enfermedad de Crohn",
+          "ENFERMEDAD DE CROHN DE INTESTINOS DELGADO Y GRUESO, CON COMPLICACIONES NO ESPECIFICADAS": "Enfermedad de Crohn",
+          "ENFERMEDAD DE CROHN DE INTESTINOS DELGADO Y GRUESO, CON OTRA COMPLICACION": "Enfermedad de Crohn",
+          "ENFERMEDAD DE CROHN DE INTESTINOS DELGADO Y GRUESO, SIN COMPLICACIONES": "Enfermedad de Crohn",
+          "ENFERMEDAD DE CROHN, NO ESPECIFICADA, CON FISTULA": "Enfermedad de Crohn",
+          "ENFERMEDAD DE CROHN, NO ESPECIFICADA, CON OTRA COMPLICACION": "Enfermedad de Crohn",
+          "ENFERMEDAD DE CROHN, NO ESPECIFICADA, SIN COMPLICACIONES": "Enfermedad de Crohn",
+          "ENTERITIS REGIONAL INTEST. DELGADO CON GRUESO": "Enfermedad de Crohn",
+          "ENTERITIS REGIONAL INTESTINO DELGADO": "Enfermedad de Crohn",
+          "ENTERITIS REGIONAL INTESTINO GRUESO": "Enfermedad de Crohn",
+          "ENTERITIS REGIONAL SITIO NO ESPECIFICADO": "Enfermedad de Crohn",
+          "COLITIS DEL LADO IZQUIERDO SIN COMPLICACIONES": "Colitis ulcerosa",
+          "COLITIS ULCERATIVA INESPECIFICA": "Colitis ulcerosa",
+          "COLITIS ULCERATIVA UNIVERSAL (CRONICA)": "Colitis ulcerosa",
+          "COLITIS ULCEROSA, NO ESPECIFICADA CON OTRA COMPLICACION": "Colitis ulcerosa",
+          "COLITIS ULCEROSA, NO ESPECIFICADA CON OTRA COMPLICACIÓN": "Colitis ulcerosa",
+          "COLITIS ULCEROSA, NO ESPECIFICADA, SIN COMPLICACIONES": "Colitis ulcerosa",
+          "PANCOLITIS ULCEROSA (CRONICA) CON ABSCESO": "Colitis ulcerosa",
+          "PANCOLITIS ULCEROSA (CRONICA) SIN COMPLICACIONES": "Colitis ulcerosa",
+          "PANCOLITIS ULCEROSA (CRÓNICA) SIN COMPLICACIONES": "Colitis ulcerosa",
+          "PROCTITIS ULCERATIVA (CRONICA)": "Colitis ulcerosa",
+          "PROCTITIS ULCEROSA (CRONICA) SIN COMPLICACIONES": "Colitis ulcerosa",
+          "PROCTITIS ULCEROSA (CRÓNICA) SIN COMPLICACIONES": "Colitis ulcerosa",
+          "RECTOSIGMOIDITIS ULCEROSA (CRONICA) SIN COMPLICACIONES": "Colitis ulcerosa",
+          "RESERVORITIS": "Colitis ulcerosa",
+          "ENFERMEDAD GLOMERULAR EN LUPUS ERITEMATOSO SISTEMICO": "Lupus eritematoso (sistémico y cutáneo)",
+          "LUPUS ERITEMATOSO CUTANEO SUBAGUDO": "Lupus eritematoso (sistémico y cutáneo)",
+          "LUPUS ERITEMATOSO DISCOIDE": "Lupus eritematoso (sistémico y cutáneo)",
+          "LUPUS ERITEMATOSO RELATIVO A SISTEMA": "Lupus eritematoso (sistémico y cutáneo)",
+          "LUPUS ERITEMATOSO SISTEMICO NO ESPECIFICADO": "Lupus eritematoso (sistémico y cutáneo)",
+          "LUPUS ERITEMATOSO SISTEMICO, AFECTACION DE ORGANO O SISTEMA NO ESPECIFICADO": "Lupus eritematoso (sistémico y cutáneo)",
+          "LUPUS ERITEMATOSO SISTÉMICO NO ESPECIFICADO": "Lupus eritematoso (sistémico y cutáneo)",
+          "LUPUS ERITEMATOSO SISTÉMICO, AFECTACIÓN DE ÓRGANO O SISTEMA NO ESPECIFICADO": "Lupus eritematoso (sistémico y cutáneo)",
+          "ESCLERODERMIA CIRCUNSCRITA": "Esclerosis sistémica / esclerodermia",
+          "ESCLERODERMIA LINEAL": "Esclerosis sistémica / esclerodermia",
+          "ESCLERODERMIA LOCALIZADA [MORFEA]": "Esclerosis sistémica / esclerodermia",
+          "ESCLEROSIS SISTEMICA": "Esclerosis sistémica / esclerodermia",
+          "ESCLEROSIS SISTEMICA PROGRESIVA": "Esclerosis sistémica / esclerodermia",
+          "ESCLEROSIS SISTEMICA, NO ESPECIFICADA": "Esclerosis sistémica / esclerodermia",
+          "ESCLEROSIS SISTÉMICA PROGRESIVA": "Esclerosis sistémica / esclerodermia",
+          "ESCLEROSIS SISTÉMICA, NO ESPECIFICADA": "Esclerosis sistémica / esclerodermia",
+          "SINDROME SECO NO ESPECIFICADO": "Síndrome de Sjögren / síndrome seco",
+          "SÍNDROME DE SJÖGREN, NO ESPECIFICADO": "Síndrome de Sjögren / síndrome seco",
+          "SÍNDROME SECO NO ESPECIFICADO": "Síndrome de Sjögren / síndrome seco",
+          "DERMATOMIOSITIS JUVENIL, AFECTACION DE ORGANO NO ESPECIFICADO": "Miopatías inflamatorias (dermato-/polimiositis)",
+          "DERMATOPOLIMIOSITIS, NO ESPECIFICADA, AFECTACION DE ORGANO NO ESPECIFICADA": "Miopatías inflamatorias (dermato-/polimiositis)",
+          "ANGEITIS POR HIPERSENSIBILIDAD": "Vasculitis",
+          "AORTITIS EN ENFERMEDADES CLASIFICADAS BAJO OTRO CONCEPTO": "Vasculitis",
+          "ARTERITIS DE CELULAS GIGANTES": "Vasculitis",
+          "ARTERITIS DE CELULAS GIGANTES CON POLIMIALGIA REUMATICA": "Vasculitis",
+          "ARTERITIS DE CÉLULAS GIGANTES CON POLIMIALGIA REUMÁTICA": "Vasculitis",
+          "ARTERITIS, NO ESPECIFICADA": "Vasculitis",
+          "ENFERMEDAD DE TAKAYASU": "Vasculitis",
+          "GRANULOMATOSIS DE WEGENER": "Vasculitis",
+          "OTRAS ARTERITIS DE CELULAS GIGANTES": "Vasculitis",
+          "OTRAS ARTERITIS DE CÉLULAS GIGANTES": "Vasculitis",
+          "POLIARTERITIS CON PARTICIPACION PULMONAR [CHURG-STRAUSS]": "Vasculitis",
+          "POLIARTERITIS NODOSA": "Vasculitis",
+          "SINDROME DEL CAYADO AORTICO [TAKAYASU]": "Vasculitis",
+          "SÍNDROME DEL CAYADO AÓRTICO [TAKAYASU]": "Vasculitis",
+          "POLIMIALGIA REUMATICA": "Polimialgia reumática",
+          "POLIMIALGIA REUMÁTICA": "Polimialgia reumática",
+          "CICLITIS POSTERIOR, BILATERAL": "Uveítis e inflamación ocular inmunomediada",
+          "CICLITIS POSTERIOR, OJO NO ESPECIFICADO": "Uveítis e inflamación ocular inmunomediada",
+          "ESCLERITIS NEOM": "Uveítis e inflamación ocular inmunomediada",
+          "ESCLERITIS NO ESPECIFICADA, OJO NO ESPECIFICADO": "Uveítis e inflamación ocular inmunomediada",
+          "INFLAMACION CORIORRETINIANA NO ESPECIFICADA, OJO IZQUIERDO": "Uveítis e inflamación ocular inmunomediada",
+          "INFLAMACION CORIORRETINIANA NO ESPECIFICADA, OJO NO ESPECIFICADO": "Uveítis e inflamación ocular inmunomediada",
+          "INFLAMACIÓN CORIORRETINIANA NO ESPECIFICADA, OJO NO ESPECIFICADO": "Uveítis e inflamación ocular inmunomediada",
+          "IRIDOCICLITIS AGUDA RECURRENTE, OJO NO ESPECIFICADO": "Uveítis e inflamación ocular inmunomediada",
+          "IRIDOCICLITIS AGUDA Y SUBAGUDA NO ESPECIFICADAS": "Uveítis e inflamación ocular inmunomediada",
+          "IRIDOCICLITIS CRONICA, BILATERAL": "Uveítis e inflamación ocular inmunomediada",
+          "IRIDOCICLITIS CRONICA, OJO NO ESPECIFICADO": "Uveítis e inflamación ocular inmunomediada",
+          "IRIDOCICLITIS NO ESPECIFICADA": "Uveítis e inflamación ocular inmunomediada",
+          "IRIDOCICLITIS PRIMARIA, OJO DERECHO": "Uveítis e inflamación ocular inmunomediada",
+          "IRIDOCICLITIS SECUNDARIA NO INFECCIOSA, OJO DERECHO": "Uveítis e inflamación ocular inmunomediada",
+          "IRIDOCICLITIS SECUNDARIA NO INFECCIOSA, OJO NO ESPECIFICADO": "Uveítis e inflamación ocular inmunomediada",
+          "PANUVEITIS": "Uveítis e inflamación ocular inmunomediada",
+          "PANUVEITIS, BILATERAL": "Uveítis e inflamación ocular inmunomediada",
+          "PANUVEITIS, OJO DERECHO": "Uveítis e inflamación ocular inmunomediada",
+          "PANUVEITIS, OJO NO ESPECIFICADO": "Uveítis e inflamación ocular inmunomediada",
+          "PANUVEÍTIS, BILATERAL": "Uveítis e inflamación ocular inmunomediada",
+          "PANUVEÍTIS, OJO IZQUIERDO": "Uveítis e inflamación ocular inmunomediada",
+          "VASCULITIS RETINIANA, OJO NO ESPECIFICADO": "Uveítis e inflamación ocular inmunomediada",
+          "ENFERMEDAD DE BEHÇET": "Enfermedad de Behçet",
+          "SINDROME BEHCET": "Enfermedad de Behçet",
+          "SARCOIDOSIS": "Sarcoidosis",
+          "SARCOIDOSIS, NO ESPECIFICADA": "Sarcoidosis",
+          "COLITIS EOSINOFILICA": "Enfermedades eosinofílicas digestivas",
+          "ESOFAGITIS EOSINOFILICA": "Enfermedades eosinofílicas digestivas",
+          "ENFERMEDAD DE STILL DE INICIO EN EL ADULTO": "Enf. de Still del adulto y síndromes autoinflamatorios / fiebre periódica",
+          "FIEBRE MEDITERRANEA FAMILIAR": "Enf. de Still del adulto y síndromes autoinflamatorios / fiebre periódica",
+          "FIEBRE RECURRENTE, NO ESPECIFICADA": "Enf. de Still del adulto y síndromes autoinflamatorios / fiebre periódica",
+          "OSTEOMIELITIS MULTIFOCAL CRONICA, LOCALIZACIONES MULTIPLES": "Enf. de Still del adulto y síndromes autoinflamatorios / fiebre periódica",
+          "OSTEOMIELITIS MULTIFOCAL CRONICA, OTRA LOCALIZACION": "Enf. de Still del adulto y síndromes autoinflamatorios / fiebre periódica",
+          "OSTEOMIELITIS MULTIFOCAL CRÓNICA, LOCALIZACIONES MÚLTIPLES": "Enf. de Still del adulto y síndromes autoinflamatorios / fiebre periódica",
+          "SINDROME AUTOINFLAMATORIO, NO ESPECIFICADO": "Enf. de Still del adulto y síndromes autoinflamatorios / fiebre periódica",
+          "SINDROMES DE FIEBRE PERIODICA": "Enf. de Still del adulto y síndromes autoinflamatorios / fiebre periódica",
+          "SÍNDROMES DE FIEBRE PERIÓDICA": "Enf. de Still del adulto y síndromes autoinflamatorios / fiebre periódica",
+          "VITILIGO": "Vitíligo",
+          "ALOPECIA AREATA": "Alopecia areata",
+          "ALOPECIA AREATA, NO ESPECIFICADA": "Alopecia areata",
+          "ALOPECIA UNIVERSAL": "Alopecia areata",
+          "OTROS TIPOS DE ALOPECIA AREATA": "Alopecia areata",
+          "OTRA URTICARIA ESPECIFICADA": "Urticaria (crónica / inducible)",
+          "OTROS TIPOS DE URTICARIA": "Urticaria (crónica / inducible)",
+          "URTICARIA ALERGICA": "Urticaria (crónica / inducible)",
+          "URTICARIA COLINERGICA": "Urticaria (crónica / inducible)",
+          "URTICARIA COLINÉRGICA": "Urticaria (crónica / inducible)",
+          "URTICARIA DEBIDA AL CALOR Y AL FRIO": "Urticaria (crónica / inducible)",
+          "URTICARIA IDIOPATICA": "Urticaria (crónica / inducible)",
+          "URTICARIA IDIOPÁTICA": "Urticaria (crónica / inducible)",
+          "URTICARIA MECANICA": "Urticaria (crónica / inducible)",
+          "URTICARIA MECÁNICA": "Urticaria (crónica / inducible)",
+          "URTICARIA NO ESPECIFICADA": "Urticaria (crónica / inducible)",
+          "URTICARIA SOLAR": "Urticaria (crónica / inducible)",
+          "URTICARIA, NO ESPECIFICADA": "Urticaria (crónica / inducible)",
+          "ARTROPATIA GOTOSA": "Gota y artropatías por microcristales",
+          "ARTROPATIA POR CRISTALES NO ESPECIFICADA": "Gota y artropatías por microcristales",
+          "GOTA CRONICA NO ESPECIFICADA, CON TOFOS": "Gota y artropatías por microcristales",
+          "GOTA CRONICA NO ESPECIFICADA, SIN TOFOS": "Gota y artropatías por microcristales",
+          "GOTA CRÓNICA NO ESPECIFICADA, SIN TOFOS": "Gota y artropatías por microcristales",
+          "GOTA IDIOPATICA, LOCALIZACION NO ESPECIFICADA": "Gota y artropatías por microcristales",
+          "GOTA IDIOPÁTICA CRÓNICA, LOCALIZACIONES MÚLTIPLES, SIN TOFOS": "Gota y artropatías por microcristales",
+          "GOTA IDIOPÁTICA, LOCALIZACIÓN NO ESPECIFICADA": "Gota y artropatías por microcristales",
+          "OTRAS CONDROCALCINOSIS, LOCALIZACION NO ESPECIFICADA": "Gota y artropatías por microcristales",
+          "OTROS TRASTORNOS AMPOLLOSOS ESPECIFICADOS": "Enfermedades ampollosas autoinmunes (pénfigo / penfigoide)",
+          "PENFIGO, NO ESPECIFICADO": "Enfermedades ampollosas autoinmunes (pénfigo / penfigoide)",
+          "PENFIGOIDE AMPOLLOSO": "Enfermedades ampollosas autoinmunes (pénfigo / penfigoide)",
+          "PENFIGOIDE, NO ESPECIFICADO": "Enfermedades ampollosas autoinmunes (pénfigo / penfigoide)",
+          "PÉNFIGO, NO ESPECIFICADO": "Enfermedades ampollosas autoinmunes (pénfigo / penfigoide)",
+          "DERMATITIS DE CONTACTO NO ESPECIFICADA, CAUSA NO ESPECIFICADA": "Otras dermatosis inflamatorias",
+          "DERMATITIS PUSTULOSA SUBCORNEAL": "Otras dermatosis inflamatorias",
+          "DERMATITIS, NO ESPECIFICADA": "Otras dermatosis inflamatorias",
+          "DISHIDROSIS [POMPHOLIX] (ECCEMA DISHIDROTICO) (L)": "Otras dermatosis inflamatorias",
+          "ERITEMA NODOSO": "Otras dermatosis inflamatorias",
+          "GRANULOMA ANULAR": "Otras dermatosis inflamatorias",
+          "LIQUEN PLANO, NO ESPECIFICADO": "Otras dermatosis inflamatorias",
+          "LIQUEN SIMPLE CRONICO": "Otras dermatosis inflamatorias",
+          "OTROS PRURIGOS": "Otras dermatosis inflamatorias",
+          "PANICULITIS, LUGAR NO ESPECIFICADO": "Otras dermatosis inflamatorias",
+          "PANICULITIS, NO ESPECIFICADA": "Otras dermatosis inflamatorias",
+          "PIODERMA GANGRENOSO": "Otras dermatosis inflamatorias",
+          "PITIRIASIS RUBRA PILARIS": "Otras dermatosis inflamatorias",
+          "PRURIGO NODULAR": "Otras dermatosis inflamatorias",
+          "QUERATOSIS [QUERATODERMIA] PALMAR Y PLANTAR ADQUIRIDA": "Otras dermatosis inflamatorias",
+          "ACNE QUELOIDE": "Alopecias cicatriciales y otros trastornos del cabello/folículo",
+          "ALOPECIA ANDROGENICA, NO ESPECIFICADA": "Alopecias cicatriciales y otros trastornos del cabello/folículo",
+          "ALOPECIA CICATRICIAL, NO ESPECIFICADA": "Alopecias cicatriciales y otros trastornos del cabello/folículo",
+          "ALOPECIA NO ESPECIFICADA": "Alopecias cicatriciales y otros trastornos del cabello/folículo",
+          "FOLICULITIS DECALVANTE": "Alopecias cicatriciales y otros trastornos del cabello/folículo",
+          "LIQUEN PLANO PILAR": "Alopecias cicatriciales y otros trastornos del cabello/folículo",
+          "OTRA ENFERMEDAD ESPECIFICADA DEL PELO Y FOLICULOS PILOSOS": "Alopecias cicatriciales y otros trastornos del cabello/folículo",
+          "PERDIDA DE CABELLO NO CICATRICIAL, NO ESPECIFICADA": "Alopecias cicatriciales y otros trastornos del cabello/folículo",
+          "PÉRDIDA DE CABELLO NO CICATRICIAL, NO ESPECIFICADA": "Alopecias cicatriciales y otros trastornos del cabello/folículo",
+          "TRASTORNO FOLICULAR, NO ESPECIFICADO": "Alopecias cicatriciales y otros trastornos del cabello/folículo",
+          "AFECTACION SISTEMICA DE TEJIDO CONECTIVO, NO ESPECIFICADA": "Otras conectivopatías y síndromes inmunológicos",
+          "ELEVACION DEL TITULO DE ANTICUERPOS": "Otras conectivopatías y síndromes inmunológicos",
+          "ELEVACIÓN DEL TÍTULO DE ANTICUERPOS": "Otras conectivopatías y síndromes inmunológicos",
+          "OTROS SINDROMES DE SOLAPAMIENTO": "Otras conectivopatías y síndromes inmunológicos",
+          "OTROS SÍNDROMES DE SOLAPAMIENTO": "Otras conectivopatías y síndromes inmunológicos",
+          "OTROS TRASTORNOS ESPECIF. IMPLICAN DEL MECANISMO INMUNITARIO": "Otras conectivopatías y síndromes inmunológicos",
+          "OTROS TRASTORNOS ESPECIFICADOS QUE AFECTAN AL MECANISMO INMUNOLOGICO, NO CLASIFICADOS BAJO OTRO CONCEPTO": "Otras conectivopatías y síndromes inmunológicos",
+          "OTROS TRASTORNOS ESPECIFICADOS QUE AFECTAN AL MECANISMO INMUNOLÓGICO, NO CLASIFICADOS BAJO OTRO CONCEPTO": "Otras conectivopatías y síndromes inmunológicos",
+          "POLICONDRITIS RECIDIVANTE": "Otras conectivopatías y síndromes inmunológicos",
+          "SINDROME DE ANTICOAGULANTE LUPICO": "Otras conectivopatías y síndromes inmunológicos",
+          "ARTROPATIA NO ESPECIFICADA": "Artropatías inflamatorias inespecíficas / no filiadas",
+          "ARTROPATIA NO ESPECIFICADA-LOCALIZ. NO ESPECIFICADA": "Artropatías inflamatorias inespecíficas / no filiadas",
+          "ARTROPATÍA NO ESPECIFICADA": "Artropatías inflamatorias inespecíficas / no filiadas",
+          "MONOARTRITIS, NO CLASIFICADAS BAJO OTRO CONCEPTO, LOCALIZACION NO ESPECIFICADA": "Artropatías inflamatorias inespecíficas / no filiadas",
+          "MONOARTRITIS, NO CLASIFICADAS BAJO OTRO CONCEPTO, RODILLA DERECHA": "Artropatías inflamatorias inespecíficas / no filiadas",
+          "MONOARTRITIS, NO CLASIFICADAS BAJO OTRO CONCEPTO, RODILLA IZQUIERDA": "Artropatías inflamatorias inespecíficas / no filiadas",
+          "OTROS TIPOS DE SINOVITIS Y TENOSINOVITIS, TOBILLO Y PIE DERECHOS": "Artropatías inflamatorias inespecíficas / no filiadas",
+          "POLIARTRITIS NO ESPECIFICADA": "Artropatías inflamatorias inespecíficas / no filiadas",
+          "REUMATISMO PALINDROMICO, LOCALIZACION NO ESPECIFICADA": "Artropatías inflamatorias inespecíficas / no filiadas",
+          "REUMATISMO PALINDRÓMICO, LOCALIZACIÓN NO ESPECIFICADA": "Artropatías inflamatorias inespecíficas / no filiadas",
+          "ABSCESO ANAL": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "ACNE, NO ESPECIFICADO": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "AFECCION ERITEMATOSA, NO ESPECIFICADA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "AFECCIONES INFLAMATORIAS DE LOS MAXILARES": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "AFECCIÓN ERITEMATOSA, NO ESPECIFICADA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "AFTAS BUCALES": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "AFTAS ORALES RECIDIVANTES": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "AMILOIDOSIS HEREDITARIA FAMILIAR NO NEUROPATICA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "AMILOIDOSIS HEREDITARIA FAMILIAR NO NEUROPÁTICA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "ANEMIA FERROPENICA, NO ESPECIFICADA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "ANEMIA, NO ESPECIFICADA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "ANEURISMA DE AORTA TORACICA, SIN ROTURA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "ANEURISMA DE AORTA TORÁCICA, SIN ROTURA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "ANEURISMA TORACICO SIN MENCION DE RUPTURA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "ARTROSIS NO ESPECIFICADA, LOCALIZACION NO ESPECIFICADA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "ARTROSIS NO ESPECIFICADA, LOCALIZACIÓN NO ESPECIFICADA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "ARTROSIS PRIMARIA, MANO DERECHA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "CALCINOSIS DE PIEL": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "CARENCIA DE HIERRO": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "CARENCIA DE VITAMINA D, NO ESPECIFICADA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "CELULITIS DE CABEZA [CUALQUIER PARTE, EXCEPTO DE CARA]": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "CELULITIS, NO ESPECIFICADA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "COLITIS COLAGENOSA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "COLITIS INDETERMINADA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "DERRAME PLEURAL, NO CLASIFICABLE BAJO OTRO CONCEPTO": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "DIARREA, NO ESPECIFICADA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "DISECCION DE AORTA TORACICA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "DISPEPSIA FUNCIONAL": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "DIVERTICULOSIS DE COLON SIN PERFORACION NI ABSCESO, SIN HEMORRAGIA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "DOLOR ABDOMINAL NO ESPECIFICADO": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "DOLOR EN ARTICULACION NO ESPECIFICADA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "DOLOR EN ARTICULACIÓN NO ESPECIFICADA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "DOLOR EN CADERA IZQUIERDA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "DOLOR EN LA PARTE INFERIOR DE LA ESPALDA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "DOLOR, NO ESPECIFICADO": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "EDEMA DE RETINA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "EDEMA LOCALIZADO": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "ENFERMEDAD CELIACA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "ENFERMEDAD DE ANO Y RECTO, NO ESPECIFICADA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "ENFERMEDAD ERITEMATOSA NO ESPECIFICADA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "ENFERMEDAD POR REFLUJO GASTROESOFÁGICO SIN ESOFAGITIS": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "ENFERMEDADES DEL PERICARDIO, NO ESPECIFICADAS": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "EPIDERMOLISIS AMPOLLOSA DISTROFICA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "ESPONDILOSIS CON LOCALIZ. NO ESPECIF. SIN MENCION MIELOPATIA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "ESPONDILOSIS SIN MIELOPATIA NI RADICULOPATIA, REGION CERVICAL": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "ESPONDILOSIS, NO ESPECIFICADA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "ESTADO DE TRASPLANTE DE CELULAS MADRE": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "ESTEATOHEPATITIS NO ALCOHOLICA (EHNA)": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "FIEBRE, NO ESPECIFICADA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "FISTULA ANAL": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "FÍSTULA ANAL": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "FÍSTULA DE INTESTINO": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "GASTROENTERITIS Y COLITIS NO INFECCIOSAS, NO ESPECIFICADAS": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "GRANULOMA POR CUERPO EXTRAÑO DE PARTES BLANDAS, NO CLASIFICADO BAJO OTRO CONCEPTO, LOCALIZACION NO ESPECIFICADA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "HEMORRAGIA DE VITREO, OJO IZQUIERDO": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "HEMORRAGIA GASTROINTESTINAL, NO ESPECIFICADA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "INFECCION LOCAL DE LA PIEL Y DEL TEJIDO SUBCUTANEO, NO ESPECIFICADA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "INFECCIÓN LOCAL DE LA PIEL Y DEL TEJIDO SUBCUTÁNEO, NO ESPECIFICADA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "INSUFICIENCIA VENOSA (CRONICA) (PERIFERICA)": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "LEPRA LEPROMATOSA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "MALABSORCION DEBIDA A INTOLERANCIA, NO CLASIFICADA BAJO OTRO CONCEPTO": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "MASTITIS GRANULOMATOSA, BILATERAL": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "MIALGIA, LOCALIZACION NO ESPECIFICADA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "MICOSIS FUNGOIDE, LOCALIZACION NO ESPECIFICADA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "MICOSIS FUNGOIDE, LOCALIZACIONES EXTRAGANGLIONARES Y DE ORGANOS SOLIDOS": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "MIOSITIS OSIFICANTE PROGRESIVA, LOCALIZACION NO ESPECIFICADA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "NECROLISIS EPIDERMICA TOXICA [LYELL]": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "NECRÓLISIS EPIDÉRMICA TÓXICA [LYELL]": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "NEUMONIA INTERSTICIAL IDIOPATICA, NO ESPECIFICADA DE OTRO MODO": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "OBSTRUCCIÓN INTESTINAL NO ESPECIFICADA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "OSTEOMIELITIS, NO ESPECIFICADA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "OTRAS ENFERMEDADES DEL MEDIASTINO, NO CLASIFICABLES BAJO OTRO CONCEPTO": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "OTRAS ENTERITIS VIRALES": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "OTRAS FORMAS DE ESTOMATITIS": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "OTRAS MALFORMACIONES CONGENITAS ESPECIFICADAS DE LA PIEL": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "OTRAS MALFORMACIONES CONGÉNITAS ESPECIFICADAS DE LA PIEL": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "OTRAS PERITONITIS": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "OTRO TIPO DE OSTEOMIELITIS CRONICA, LOCALIZACION NO ESPECIFICADA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "OTROS SINDROMES DE HISTIOCITOSIS": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "OTROS SINDROMES MALFORMATIVOS CONGENITOS ASOCIADOS PRINCIPALMENTE CON ESTATURA BAJA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "OTROS SÍNDROMES DE CEFALEA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "OTROS TIPOS DE ESPONDILOSIS, LOCALIZACION NO ESPECIFICADA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "OTROS TIPOS DE ESPONDILOSIS, LOCALIZACIÓN NO ESPECIFICADA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "OTROS TIPOS DE OBSTRUCCION INTESTINAL": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "OTROS TIPOS DE PRURITO": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "OTROS TRASTORNOS ENDOCRINOS ESPECIFICADOS": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "PERICARDITIS AGUDA IDIOPATICA INESPECIFICA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "PERICARDITIS AGUDA IDIOPÁTICA INESPECÍFICA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "PERICARDITIS AGUDA NEOM": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "PERICARDITIS AGUDA, NO ESPECIFICADA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "PERICARDITIS CRONICA REUMATICA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "PERICARDITIS CRÓNICA REUMÁTICA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "PERICARDITIS IDIOPATICA AGUDA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "PRURITO, NO ESPECIFICADO": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "QUERATITIS INTERSTICIAL DIFUSA, OJO NO ESPECIFICADO": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "REACCION INESPECIFICA A LA PRUEBA CUTANEA DE LA TUBERCULINA SIN TUBERCULOSIS ACTIVA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "REACCIÓN INESPECÍFICA A LA PRUEBA CUTÁNEA DE LA TUBERCULINA SIN TUBERCULOSIS ACTIVA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "SINDROME DE HIPERMOVILIDAD": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "SINDROME DE RAYNAUD SIN GANGRENA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "SINUS PILONIDAL SIN ABSCESO": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "SÍNDROME DE HIPERMOVILIDAD": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "TIÑA DE LAS UÑAS": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "TRASTORNO DE LA PIEL Y DEL TEJIDO SUBCUTANEO, NO ESPECIFICADO": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "TRASTORNO DEPRESIVO MAYOR, EPISODIO ÚNICO, NO ESPECIFICADO": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)",
+          "TUMEFACCION, MASA O BULTO LOCALIZADOS EN LA CABEZA": "Otras condiciones, síntomas y comorbilidades (no diana / no clasificables)"
+};
+
+        function normalizePathology(value) {
+            if (!value || typeof value !== 'string') return null;
+            return PATHOLOGY_MAP[value.trim()] || null;
+        }
 
         // Configuración de la zona de carga
         const uploadArea = document.getElementById('uploadArea');
@@ -504,30 +906,49 @@
             const normalized = [];
             let normalizedCount = 0;
             let notNormalizedCount = 0;
+            let pathologyNotFound = 0;
+
+            // Detectar columna de patología (insensible a mayúsculas/tildes)
+            const firstRowKeys = data[0] ? Object.keys(data[0]) : [];
+            const pathologyColumn = firstRowKeys.find(k => {
+                const kl = k.trim().toLowerCase();
+                return kl === 'patología' || kl === 'patologia';
+            });
 
             data.forEach(row => {
                 const originalDescription = row[columnName] || '';
                 const normalizedDescription = normalizeMedicationName(originalDescription);
-                
+
                 if (normalizedDescription.startsWith('NO NORMALIZABLE:')) {
                     notNormalizedCount++;
                 } else {
                     normalizedCount++;
                 }
 
-                // Crear nueva fila con columnas reorganizadas
                 const newRow = {};
-                
-                // Copiar todas las columnas excepto la descripción original
+                let originalPathology = '';
+
+                // Recorrer columnas en orden original, sustituyendo en su posición
                 Object.keys(row).forEach(key => {
-                    if (key !== columnName) {
+                    if (pathologyColumn && key === pathologyColumn) {
+                        // Patología: sustituir en su posición por la normalizada
+                        originalPathology = row[key] != null ? String(row[key]).trim() : '';
+                        const normalizedPath = normalizePathology(originalPathology);
+                        if (originalPathology && !normalizedPath) pathologyNotFound++;
+                        newRow[key] = normalizedPath !== null ? normalizedPath : originalPathology;
+                    } else if (key === columnName) {
+                        // Medicamento: sustituir en su posición por el valor normalizado
+                        newRow['Descripción Producto Dispensado'] = normalizedDescription;
+                    } else {
                         newRow[key] = row[key];
                     }
                 });
 
-                // Añadir columnas de descripción en el nuevo orden
-                newRow['Descripción Producto Dispensado'] = normalizedDescription;
+                // Añadir solo los originales al final
                 newRow['Descripción Producto Dispensado original'] = originalDescription;
+                if (pathologyColumn) {
+                    newRow['Patología original'] = originalPathology;
+                }
 
                 normalized.push(newRow);
             });
@@ -537,7 +958,9 @@
                 stats: {
                     total: data.length,
                     normalized: normalizedCount,
-                    notNormalized: notNormalizedCount
+                    notNormalized: notNormalizedCount,
+                    pathologyNotFound: pathologyNotFound,
+                    hasPathology: !!pathologyColumn
                 }
             };
         }
@@ -598,7 +1021,13 @@
 
             if (result.stats.notNormalized > 0) {
                 alerts += `<div class="alert alert-warning">
-                    ⚠️ ${result.stats.notNormalized.toLocaleString()} registros no pudieron normalizarse (sin dosificación en mg)
+                    ⚠️ ${result.stats.notNormalized.toLocaleString()} registros de medicamento no pudieron normalizarse (sin dosificación en mg)
+                </div>`;
+            }
+
+            if (result.stats.hasPathology && result.stats.pathologyNotFound > 0) {
+                alerts += `<div class="alert alert-warning">
+                    ⚠️ ${result.stats.pathologyNotFound.toLocaleString()} registros de patología no encontrados en el diccionario (se conserva el valor original)
                 </div>`;
             }
 
@@ -626,27 +1055,29 @@
             const seen = new Set();
 
             for (let row of data) {
-                const original = row['Descripción Producto Dispensado original'];
-                const normalized = row['Descripción Producto Dispensado'];
-                const key = original + '|' + normalized;
+                const medOriginal = row['Descripción Producto Dispensado original'] || '';
+                const medNorm = row['Descripción Producto Dispensado'] || '';
+                const pathOriginal = row['Patología original'] !== undefined ? row['Patología original'] : '—';
+                const pathNorm = row['Patología'] !== undefined ? row['Patología'] : '—';
+                const key = medOriginal + '|' + medNorm + '|' + pathOriginal;
 
                 if (!seen.has(key)) {
                     seen.add(key);
-                    uniqueExamples.push({ original, normalized });
-
+                    uniqueExamples.push({ medOriginal, medNorm, pathOriginal, pathNorm });
                     if (uniqueExamples.length >= 50) break;
                 }
             }
 
-            uniqueExamples.forEach(example => {
+            uniqueExamples.forEach(ex => {
                 const tr = document.createElement('tr');
-                const isNotNormalizable = example.normalized.startsWith('NO NORMALIZABLE:');
+                const isNotNorm = ex.medNorm.startsWith('NO NORMALIZABLE:');
+                const pathChanged = ex.pathOriginal !== '—' && ex.pathNorm !== ex.pathOriginal;
 
                 tr.innerHTML = `
-                    <td class="original-text">${escapeHtml(example.original)}</td>
-                    <td class="${isNotNormalizable ? 'not-normalizable' : 'normalized-text'}">
-                        ${escapeHtml(example.normalized)}
-                    </td>
+                    <td class="original-text">${escapeHtml(String(ex.pathOriginal))}</td>
+                    <td class="${pathChanged ? 'normalized-text' : 'original-text'}">${escapeHtml(String(ex.pathNorm))}</td>
+                    <td class="original-text">${escapeHtml(ex.medOriginal)}</td>
+                    <td class="${isNotNorm ? 'not-normalizable' : 'normalized-text'}">${escapeHtml(ex.medNorm)}</td>
                 `;
                 tableBody.appendChild(tr);
             });
